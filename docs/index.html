@@ -387,7 +387,7 @@ let allItems      = [];
 let activeTab     = 'all';
 let isAdminMode   = false;
 let discardedIds  = new Set();   // loaded from Supabase (or sessionStorage fallback)
-const supabaseReady = SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
+const supabaseReady = () => SUPABASE_URL !== '' && SUPABASE_ANON_KEY !== '';
 
 // ══════════════════════════════════════════════════════════════
 //  SUPABASE HELPERS
@@ -401,7 +401,7 @@ const sbHeaders = () => ({
 });
 
 async function sbLoadDiscarded() {
-  if (!supabaseReady) {
+  if (!supabaseReady()) {
     // Fallback: sessionStorage (browser-only, non-persistent across viewers)
     try { discardedIds = new Set(JSON.parse(sessionStorage.getItem('discarded') || '[]')); } catch(e){}
     return;
@@ -420,7 +420,7 @@ async function sbLoadDiscarded() {
 }
 
 async function sbDiscard(item) {
-  if (!supabaseReady) {
+  if (!supabaseReady()) {
     discardedIds.add(item.id);
     try { sessionStorage.setItem('discarded', JSON.stringify([...discardedIds])); } catch(e){}
     return true;
@@ -448,7 +448,7 @@ async function sbDiscard(item) {
 }
 
 async function sbRestore(articleId) {
-  if (!supabaseReady) {
+  if (!supabaseReady()) {
     discardedIds.delete(articleId);
     try { sessionStorage.setItem('discarded', JSON.stringify([...discardedIds])); } catch(e){}
     return true;
@@ -508,7 +508,7 @@ function enterAdminMode() {
   document.getElementById('btnAdmin').classList.add('active');
   document.getElementById('adminBtnLabel').textContent = 'Exit Admin';
   document.getElementById('hdrSub').textContent = 'Moderation mode active';
-  if (!supabaseReady) document.getElementById('cfgTip').style.display = 'flex';
+  if (!supabaseReady()) document.getElementById('cfgTip').style.display = 'flex';
   updateDiscardedCount();
   render();
 }
