@@ -361,17 +361,24 @@
 </footer>
 
 <script>
-// ══════════════════════════════════════════════════════════════
-//  ★  CONFIGURATION — fill these in after Supabase setup
-// ══════════════════════════════════════════════════════════════
-const SUPABASE_URL      = 'https://kgchjzcrqzrudxyqjxtf.supabase.co';       // e.g. 'https://abcxyz.supabase.co'
-const SUPABASE_ANON_KEY = 'sb_publishable_SNp8nEhgqZIEkNEtxJQy6w_MM1bdxZ7';  // long JWT string from Supabase dashboard
-const ADMIN_PASSWORD    = 'tghn-outbreaks-2026';     // choose something strong
+// Config will be populated from the secure function endpoint
+let SUPABASE_URL      = '';
+let SUPABASE_ANON_KEY = '';
+let ADMIN_PASSWORD    = '';
+let RSS2JSON_KEY      = '';
 
-// ══════════════════════════════════════════════════════════════
-//  OPTIONAL: rss2json API key
-// ══════════════════════════════════════════════════════════════
-const RSS2JSON_KEY = '83u5nok7zloegan2nrpaukaenanivarhpkq6poqh';
+async function loadConfig() {
+  try {
+    const r = await fetch('/.netlify/functions/config');
+    const cfg = await r.json();
+    SUPABASE_URL      = cfg.supabaseUrl;
+    SUPABASE_ANON_KEY = cfg.supabaseKey;
+    ADMIN_PASSWORD    = cfg.adminPassword;
+    RSS2JSON_KEY      = cfg.rss2jsonKey;
+  } catch(err) {
+    console.error('Could not load config:', err);
+  }
+}
 
 // ══════════════════════════════════════════════════════════════
 //  STATE
@@ -825,7 +832,10 @@ document.getElementById('authModal').addEventListener('click', function(ev) {
   if (ev.target === this) closeModal();
 });
 
-document.addEventListener('DOMContentLoaded', loadAll);
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadConfig();
+  loadAll();
+});
 </script>
 </body>
 </html>
