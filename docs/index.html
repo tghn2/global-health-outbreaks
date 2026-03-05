@@ -411,8 +411,9 @@ async function sbDiscard(item) {
     return true;
   }
   try {
+    const upsertHeaders = { ...sbHeaders(), 'Prefer': 'resolution=merge-duplicates,return=minimal' };
     const r = await fetch(`${SUPABASE_URL}/rest/v1/discarded_articles`, {
-      method: 'POST', headers: sbHeaders(),
+      method: 'POST', headers: upsertHeaders,
       body: JSON.stringify({ article_id: item.id, title: item.title, source: item.label, discarded_at: new Date().toISOString() }),
       signal: AbortSignal.timeout(8000)
     });
