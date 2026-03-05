@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+  ╔════════════════════════════════════════════════════════════════╗
+  ║  GLOBAL HEALTH OUTBREAK INTELLIGENCE FEED — v5                 ║
+  ║  With Supabase-backed admin moderation                         ║
+  ║                                                                ║
+  ║  SETUP REQUIRED — see SETUP-GUIDE.md for full instructions     ║
+  ║                                                                ║
+  ║  1. Create a free Supabase project at https://supabase.com     ║
+  ║  2. Run the SQL in SETUP-GUIDE.md to create the table          ║
+  ║  3. Fill in SUPABASE_URL and SUPABASE_ANON_KEY below           ║
+  ║  4. Set ADMIN_PASSWORD to your chosen admin password           ║
+  ║                                                                ║
+  ║  HOW MODERATION WORKS:                                         ║
+  ║  - All viewers see the moderated feed automatically            ║
+  ║  - Admins click the shield icon → enter password → mod mode    ║
+  ║  - In mod mode, each card gets a Discard button                ║
+  ║  - Discarded items are stored in Supabase, hidden for everyone ║
+  ║  - Admins can restore items from the Discarded panel           ║
+  ╚════════════════════════════════════════════════════════════════╝
+-->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Outbreak Intelligence Feed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:      #0b1e36;
+    --blue:      #1256a3;
+    --blue-mid:  #1a73c8;
+    --blue-pale: #e8f2fd;
+    --off:       #f5f8fc;
+    --g50:       #edf1f7;
+    --g100:      #dce3ef;
+    --g400:      #7a90a8;
+    --g600:      #3e5470;
+    --g800:      #182035;
+    --c-who:     #005eb8;
+    --c-rw:      #0d7c3d;
+    --c-cdc:     #075290;
+    --c-afro:    #0d7c3d;
+    --c-mmwr:    #7c2d12;
+    --c-pub:     #6d28d9;
+    --c-admin:   #7c3aed;
+    --r: 5px;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'IBM Plex Sans',sans-serif;background:var(--off);color:var(--g800);min-height:100vh}
+
+  .hdr{background:var(--navy);position:sticky;top:0;z-index:100;box-shadow:0 2px 16px rgba(0,0,0,.22)}
+  .hdr-line{height:3px;background:linear-gradient(90deg,var(--blue-mid),#38bdf8,var(--blue-mid));background-size:200%;animation:sw 4s ease infinite}
+  .hdr-line.admin-mode{background:linear-gradient(90deg,var(--c-admin),#a78bfa,var(--c-admin));background-size:200%;animation:sw 2s ease infinite}
+  @keyframes sw{0%{background-position:100%}100%{background-position:-100%}}
+  .hdr-in{max-width:1080px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:12px}
+  .orb{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--blue-mid),#0ea5e9);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .orb svg{width:20px;height:20px;fill:white}
+  .bt h1{font-family:'Libre Baskerville',serif;font-size:1.05rem;font-weight:700;color:#fff;line-height:1.2}
+  .bt p{font-size:.67rem;color:rgba(255,255,255,.4);letter-spacing:.07em;text-transform:uppercase;margin-top:2px}
+  .hdr-r{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .spill{display:flex;align-items:center;gap:6px;font-size:.69rem;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,.42)}
+  .sd{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.2);transition:background .3s}
+  .sd.on{background:#4ade80;animation:bk 2s infinite}
+  .sd.busy{background:#fbbf24;animation:bk .6s infinite}
+  .sd.err{background:#f87171}
+  @keyframes bk{0%,100%{opacity:1}50%{opacity:.25}}
+  .btnR{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--r);border:none;background:var(--blue-mid);color:#fff;font-family:'IBM Plex Sans',sans-serif;font-size:.78rem;font-weight:600;cursor:pointer;transition:background .15s,transform .12s;white-space:nowrap}
+  .btnR:hover{background:#3b82f6;transform:translateY(-1px)}
+  .btnR:disabled{opacity:.6;cursor:not-allowed;transform:none}
+  .btnR svg{width:13px;height:13px}
+  .btnR.spin svg{animation:rot .75s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+
+  /* Admin button */
+  .btnAdmin{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--r);border:1.5px solid rgba(255,255,255,.18);background:transparent;color:rgba(255,255,255,.55);font-family:'IBM Plex Sans',sans-serif;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+  .btnAdmin:hover{border-color:rgba(255,255,255,.4);color:#fff;background:rgba(255,255,255,.08)}
+  .btnAdmin svg{width:13px;height:13px}
+  .btnAdmin.active{background:var(--c-admin);border-color:var(--c-admin);color:#fff}
+  .btnAdmin.active:hover{background:#6d28d9}
+
+  /* Admin mode banner */
+  .admin-bar{display:none;background:linear-gradient(90deg,#4c1d95,#5b21b6);border-bottom:1px solid #7c3aed;padding:7px 22px}
+  .admin-bar.visible{display:block}
+  .admin-bar-in{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .admin-label{font-size:.72rem;font-family:'IBM Plex Mono',monospace;color:#c4b5fd;display:flex;align-items:center;gap:7px}
+  .admin-label svg{width:12px;height:12px}
+  .admin-actions{display:flex;gap:8px;align-items:center}
+  .btn-sm{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:4px;border:none;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;font-weight:600;cursor:pointer;transition:all .14s;white-space:nowrap}
+  .btn-ghost{background:rgba(255,255,255,.1);color:#ddd6fe;border:1px solid rgba(255,255,255,.15)}
+  .btn-ghost:hover{background:rgba(255,255,255,.18);color:#fff}
+  .btn-danger{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.3)}
+  .btn-danger:hover{background:rgba(239,68,68,.25);color:#fef2f2}
+  .btn-sm svg{width:11px;height:11px}
+  .discarded-count{font-size:.65rem;padding:1px 6px;border-radius:10px;background:rgba(255,255,255,.15);color:#e9d5ff;font-family:'IBM Plex Mono',monospace}
+
+  .tabs{background:#fff;border-bottom:1px solid var(--g50);box-shadow:0 1px 4px rgba(11,30,54,.07)}
+  .tabs-sc{max-width:1080px;margin:0 auto;padding:0 22px;display:flex;overflow-x:auto;scrollbar-width:none}
+  .tabs-sc::-webkit-scrollbar{display:none}
+  .tab{display:inline-flex;align-items:center;gap:6px;padding:10px 13px;border:none;background:none;font-family:'IBM Plex Sans',sans-serif;font-size:.74rem;font-weight:600;color:var(--g400);cursor:pointer;white-space:nowrap;border-bottom:2.5px solid transparent;transition:color .14s,border-color .14s}
+  .tab:hover{color:var(--g600)}
+  .tab.active{color:var(--navy);border-bottom-color:var(--blue-mid)}
+  .tdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .chip{font-size:.61rem;padding:1px 6px;border-radius:10px;background:var(--g50);color:var(--g400);font-family:'IBM Plex Mono',monospace;min-width:18px;text-align:center}
+  .tab.active .chip{background:var(--blue-pale);color:var(--blue)}
+
+  .sbar{background:var(--g50);border-bottom:1px solid var(--g100)}
+  .sbar-in{max-width:1080px;margin:0 auto;padding:9px 22px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .sw{position:relative;flex:1;min-width:160px}
+  .sw svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--g400);pointer-events:none}
+  .sw input{width:100%;padding:7px 11px 7px 30px;border:1.5px solid var(--g100);border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:.81rem;color:var(--g800);background:#fff;outline:none;transition:border-color .14s,box-shadow .14s}
+  .sw input:focus{border-color:var(--blue-mid);box-shadow:0 0 0 3px rgba(26,115,200,.11)}
+  .ssel{padding:7px 9px;border:1.5px solid var(--g100);border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:.78rem;color:var(--g600);background:#fff;cursor:pointer;outline:none}
+  .ssel:focus{border-color:var(--blue-mid)}
+  .clbl{font-size:.71rem;font-family:'IBM Plex Mono',monospace;color:var(--g400);white-space:nowrap}
+
+  .main{max-width:1080px;margin:0 auto;padding:20px 22px 60px}
+
+  /* key warning banner */
+  .key-tip{display:flex;gap:10px;align-items:flex-start;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;padding:11px 15px;margin-bottom:16px;font-size:.76rem;color:#78350f;line-height:1.55}
+  .key-tip svg{width:15px;height:15px;color:#d97706;flex-shrink:0;margin-top:1px}
+  .key-tip strong{color:#92400e}
+  .key-tip code{font-family:'IBM Plex Mono',monospace;background:rgba(0,0,0,.07);padding:1px 5px;border-radius:3px;font-size:.72rem}
+  .key-tip a{color:#b45309;font-weight:600}
+
+  /* Supabase config tip */
+  .cfg-tip{display:flex;gap:10px;align-items:flex-start;background:#f0fdf4;border:1px solid #86efac;border-radius:7px;padding:11px 15px;margin-bottom:16px;font-size:.76rem;color:#14532d;line-height:1.55}
+  .cfg-tip svg{width:15px;height:15px;color:#22c55e;flex-shrink:0;margin-top:1px}
+  .cfg-tip strong{color:#166534}
+  .cfg-tip code{font-family:'IBM Plex Mono',monospace;background:rgba(0,0,0,.07);padding:1px 5px;border-radius:3px;font-size:.72rem}
+  .cfg-tip a{color:#15803d;font-weight:600}
+
+  .feed{border:1px solid var(--g100);border-radius:8px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(11,30,54,.07)}
+  .fitem{display:flex;border-bottom:1px solid var(--g50);transition:background .12s;animation:rise .32s ease both;position:relative}
+  .fitem:last-child{border-bottom:none}
+  .fitem:hover{background:#fafcff}
+  .fitem.discarded-preview{opacity:.5;background:#fef2f2}
+  @keyframes rise{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .fitem:nth-child(1){animation-delay:.03s}.fitem:nth-child(2){animation-delay:.06s}
+  .fitem:nth-child(3){animation-delay:.09s}.fitem:nth-child(4){animation-delay:.12s}
+  .fitem:nth-child(n+5){animation-delay:.15s}
+
+  .stripe{width:3px;flex-shrink:0}
+  .ibody{flex:1;padding:13px 17px 11px;min-width:0}
+  .itop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+  .sbadge{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:3px;white-space:nowrap}
+  .idate{font-size:.67rem;font-family:'IBM Plex Mono',monospace;color:var(--g400);white-space:nowrap}
+  .ititle{font-family:'Libre Baskerville',serif;font-size:.92rem;font-weight:700;color:var(--navy);line-height:1.44;margin-bottom:4px}
+  .ititle a{color:inherit;text-decoration:none;transition:color .13s}
+  .ititle a:hover{color:var(--blue)}
+  .idesc{font-size:.79rem;color:var(--g600);line-height:1.58;margin-bottom:9px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .ifoot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .ifull{font-size:.67rem;color:var(--g400);font-weight:500}
+  .alink{font-size:.71rem;font-weight:600;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:3px;transition:gap .13s,color .13s;flex-shrink:0}
+  .alink:hover{color:var(--blue-mid);gap:6px}
+  .alink svg{width:11px;height:11px}
+
+  /* Discard button on cards */
+  .btn-discard{display:none;align-items:center;gap:4px;padding:4px 9px;border-radius:4px;border:1px solid #fca5a5;background:#fff5f5;color:#dc2626;font-family:'IBM Plex Sans',sans-serif;font-size:.68rem;font-weight:600;cursor:pointer;transition:all .14s;flex-shrink:0}
+  .btn-discard:hover{background:#fee2e2;border-color:#ef4444}
+  .btn-discard svg{width:10px;height:10px}
+  .admin-mode-on .btn-discard{display:inline-flex}
+
+  .who-b{color:var(--c-who);background:#dbeafe}  .who-s{background:var(--c-who)}
+  .rw-b   {color:var(--c-rw);   background:#dcfce7} .rw-s   {background:var(--c-rw)}
+  .cdc-b  {color:var(--c-cdc); background:#e0f0ff} .cdc-s  {background:var(--c-cdc)}
+  .afro-b {color:var(--c-afro);background:#dcfce7}  .afro-s {background:var(--c-afro)}
+  .mmwr-b {color:var(--c-mmwr);background:#fef3c7}  .mmwr-s {background:var(--c-mmwr)}
+  .pub-b{color:var(--c-pub);background:#ede9fe}   .pub-s{background:var(--c-pub)}
+
+  .state{background:#fff;border:1px solid var(--g100);border-radius:8px;padding:50px 24px;text-align:center}
+  .spinner{width:32px;height:32px;margin:0 auto 14px;border:3px solid var(--g100);border-top-color:var(--blue-mid);border-radius:50%;animation:rot .7s linear infinite}
+  .state h3{font-family:'Libre Baskerville',serif;font-size:.97rem;color:var(--navy);margin-bottom:5px}
+  .state p{font-size:.79rem;color:var(--g400)}
+  .plist{display:inline-flex;flex-direction:column;gap:4px;margin-top:14px;text-align:left}
+  .prow{font-size:.7rem;font-family:'IBM Plex Mono',monospace;color:var(--g400);display:flex;align-items:center;gap:7px;transition:color .25s}
+  .prow.done{color:#22c55e}.prow.active{color:var(--blue-mid)}.prow.fail{color:#f87171}
+  .prow svg{width:11px;height:11px;flex-shrink:0}
+
+  /* Discarded items panel */
+  .discarded-panel{display:none;margin-top:24px;border:1.5px dashed #d8b4fe;border-radius:8px;background:#faf5ff;overflow:hidden}
+  .discarded-panel.visible{display:block}
+  .dp-hdr{padding:12px 18px;background:#f3e8ff;border-bottom:1px solid #e9d5ff;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .dp-title{font-size:.78rem;font-weight:700;color:#6b21a8;display:flex;align-items:center;gap:7px;font-family:'IBM Plex Mono',monospace}
+  .dp-title svg{width:13px;height:13px}
+  .dp-body{padding:8px}
+  .dp-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:5px;background:#fff;margin-bottom:6px;border:1px solid #ede9fe;transition:background .12s}
+  .dp-item:last-child{margin-bottom:0}
+  .dp-item:hover{background:#faf5ff}
+  .dp-info{flex:1;min-width:0}
+  .dp-title-text{font-size:.79rem;font-family:'Libre Baskerville',serif;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dp-meta{font-size:.64rem;font-family:'IBM Plex Mono',monospace;color:var(--g400);margin-top:2px}
+  .btn-restore{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:4px;border:1px solid #a5b4fc;background:#eef2ff;color:#4338ca;font-family:'IBM Plex Sans',sans-serif;font-size:.68rem;font-weight:600;cursor:pointer;transition:all .14s;flex-shrink:0}
+  .btn-restore:hover{background:#e0e7ff;border-color:#6366f1}
+  .btn-restore svg{width:10px;height:10px}
+
+  /* Auth modal */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(11,30,54,.6);z-index:999;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+  .modal-overlay.visible{display:flex}
+  .modal{background:#fff;border-radius:10px;padding:28px 32px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:mrise .22s ease}
+  @keyframes mrise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  .modal h2{font-family:'Libre Baskerville',serif;font-size:1.05rem;color:var(--navy);margin-bottom:5px}
+  .modal p{font-size:.78rem;color:var(--g400);margin-bottom:18px;line-height:1.55}
+  .modal label{font-size:.73rem;font-weight:600;color:var(--g600);display:block;margin-bottom:5px}
+  .modal input[type=password]{width:100%;padding:9px 12px;border:1.5px solid var(--g100);border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:.88rem;color:var(--g800);outline:none;transition:border-color .14s,box-shadow .14s}
+  .modal input[type=password]:focus{border-color:var(--c-admin);box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+  .modal-err{font-size:.72rem;color:#dc2626;margin-top:6px;min-height:16px}
+  .modal-btns{display:flex;gap:10px;margin-top:18px;justify-content:flex-end}
+  .btn-cancel{padding:8px 16px;border-radius:var(--r);border:1.5px solid var(--g100);background:#fff;color:var(--g600);font-family:'IBM Plex Sans',sans-serif;font-size:.79rem;font-weight:600;cursor:pointer;transition:all .13s}
+  .btn-cancel:hover{background:var(--g50)}
+  .btn-confirm{padding:8px 16px;border-radius:var(--r);border:none;background:var(--c-admin);color:#fff;font-family:'IBM Plex Sans',sans-serif;font-size:.79rem;font-weight:600;cursor:pointer;transition:background .13s}
+  .btn-confirm:hover{background:#6d28d9}
+
+  footer{border-top:1px solid var(--g100);padding:14px 22px;text-align:center;background:#fff;font-size:.67rem;font-family:'IBM Plex Mono',monospace;color:var(--g400);line-height:1.9}
+  footer a{color:var(--blue);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+
+  @media(max-width:580px){
+    .hdr-in,.sbar-in,.main{padding-left:14px;padding-right:14px}
+    .tabs-sc{padding-left:14px}
+  }
+</style>
+</head>
+<body>
+
+<!-- Auth Modal -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal">
+    <h2>Admin Access</h2>
+    <p>Enter the admin password to enable moderation controls.</p>
+    <label for="pwInput">Password</label>
+    <input type="password" id="pwInput" placeholder="••••••••" onkeydown="if(event.key==='Enter')confirmAuth()">
+    <div class="modal-err" id="pwErr"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-confirm" onclick="confirmAuth()">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<header class="hdr">
+  <div class="hdr-line" id="hdrLine"></div>
+  <div class="hdr-in">
+    <div class="brand">
+      <div class="orb">
+        <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zM11 7h2v6h-2zm0 8h2v2h-2z"/></svg>
+      </div>
+      <div class="bt">
+        <h1>Outbreak Intelligence Feed</h1>
+        <p id="hdrSub">Live global health monitoring · Free &amp; open source</p>
+      </div>
+    </div>
+    <div class="hdr-r">
+      <div class="spill"><div class="sd" id="sd"></div><span id="slbl">Starting…</span></div>
+      <button class="btnAdmin" id="btnAdmin" onclick="handleAdminClick()" title="Admin moderation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span id="adminBtnLabel">Admin</span>
+      </button>
+      <button class="btnR" id="btnR" onclick="loadAll()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Admin mode bar -->
+<div class="admin-bar" id="adminBar">
+  <div class="admin-bar-in">
+    <div class="admin-label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Moderation mode active — click Discard on any article to hide it from public view
+    </div>
+    <div class="admin-actions">
+      <button class="btn-sm btn-ghost" onclick="toggleDiscardedPanel()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        Discarded <span class="discarded-count" id="discardedCount">0</span>
+      </button>
+      <button class="btn-sm btn-danger" onclick="exitAdminMode()">
+        Exit mod mode
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tabs-sc">
+    <button class="tab active" onclick="setTab('all',this)"><span class="tdot" style="background:var(--blue-mid)"></span>All Sources<span class="chip" id="chip-all">—</span></button>
+    <button class="tab" onclick="setTab('who',this)"><span class="tdot" style="background:var(--c-who)"></span>WHO DON<span class="chip" id="chip-who">—</span></button>
+    <button class="tab" onclick="setTab('rw',this)"><span class="tdot" style="background:var(--c-rw)"></span>ReliefWeb<span class="chip" id="chip-rw">—</span></button>
+    <button class="tab" onclick="setTab('cdc',this)"><span class="tdot" style="background:var(--c-cdc)"></span>CDC Travel<span class="chip" id="chip-cdc">—</span></button>
+    <button class="tab" onclick="setTab('afro',this)"><span class="tdot" style="background:var(--c-afro)"></span>WHO AFRO<span class="chip" id="chip-afro">—</span></button>
+  </div>
+</div>
+
+<div class="sbar">
+  <div class="sbar-in">
+    <div class="sw">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="Search disease, region, keyword…" oninput="render()">
+    </div>
+    <select class="ssel" id="sortSel" onchange="render()">
+      <option value="date">Most recent first</option>
+      <option value="source">By source</option>
+    </select>
+    <span class="clbl" id="clbl">— results</span>
+  </div>
+</div>
+
+<main class="main">
+
+  <!-- Supabase not configured tip -->
+  <div class="cfg-tip" id="cfgTip" style="display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>
+      <strong>Supabase not configured.</strong>
+      Admin moderation requires a free Supabase project. See the <strong>SETUP-GUIDE.md</strong> file for step-by-step instructions (~5 minutes). Until configured, discards will only persist in this browser session.
+    </span>
+  </div>
+
+  <!-- Optional key tip -->
+  <div class="key-tip" id="keyTip" style="display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>
+      <strong>More feeds available with a free key.</strong>
+      Some sources need a free <a href="https://rss2json.com" target="_blank">rss2json.com API key</a> to avoid rate limits.
+      Get one free at rss2json.com, then open this file and set <code>const RSS2JSON_KEY = "your_key_here"</code> near the top of the &lt;script&gt;.
+    </span>
+  </div>
+
+  <div id="container"></div>
+
+  <!-- Discarded items panel -->
+  <div class="discarded-panel" id="discardedPanel">
+    <div class="dp-hdr">
+      <div class="dp-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        Discarded Articles
+      </div>
+      <button class="btn-sm btn-ghost" onclick="toggleDiscardedPanel()" style="font-size:.68rem">Close ✕</button>
+    </div>
+    <div class="dp-body" id="discardedBody">
+      <p style="font-size:.76rem;color:var(--g400);padding:12px;text-align:center">No discarded articles.</p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Sources: &nbsp;
+  <a href="https://www.who.int/emergencies/disease-outbreak-news" target="_blank">WHO DON</a> ·
+  <a href="https://reliefweb.int" target="_blank">ReliefWeb</a> ·
+  <a href="https://wwwnc.cdc.gov/travel/notices" target="_blank">CDC Travel</a> ·
+  <a href="https://www.afro.who.int/health-topics/disease-outbreaks" target="_blank">WHO AFRO</a> ·
+  <br>Open source · No data collected · Free forever
+</footer>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  ★  CONFIGURATION — fill these in after Supabase setup
+// ══════════════════════════════════════════════════════════════
+const SUPABASE_URL      = 'https://kgchjzcrqzrudxyqjxtf.supabase.co';       // e.g. 'https://abcxyz.supabase.co'
+const SUPABASE_ANON_KEY = 'sb_publishable_SNp8nEhgqZIEkNEtxJQy6w_MM1bdxZ7';  // long JWT string from Supabase dashboard
+const ADMIN_PASSWORD    = 'tghn-outbreaks-2026';     // choose something strong
+
+// ══════════════════════════════════════════════════════════════
+//  OPTIONAL: rss2json API key
+// ══════════════════════════════════════════════════════════════
+const RSS2JSON_KEY = '83u5nok7zloegan2nrpaukaenanivarhpkq6poqh';
+
+// ══════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════
+let allItems      = [];
+let activeTab     = 'all';
+let isAdminMode   = false;
+let discardedIds  = new Set();   // loaded from Supabase (or sessionStorage fallback)
+const supabaseReady = SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
+
+// ══════════════════════════════════════════════════════════════
+//  SUPABASE HELPERS
+//  Uses the Supabase REST API directly — no SDK needed
+// ══════════════════════════════════════════════════════════════
+const sbHeaders = () => ({
+  'apikey': SUPABASE_ANON_KEY,
+  'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=minimal'
+});
+
+async function sbLoadDiscarded() {
+  if (!supabaseReady) {
+    // Fallback: sessionStorage (browser-only, non-persistent across viewers)
+    try { discardedIds = new Set(JSON.parse(sessionStorage.getItem('discarded') || '[]')); } catch(e){}
+    return;
+  }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/discarded_articles?select=article_id`, {
+      headers: sbHeaders(),
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!r.ok) throw new Error(`Supabase ${r.status}`);
+    const rows = await r.json();
+    discardedIds = new Set(rows.map(row => row.article_id));
+  } catch(err) {
+    console.warn('[Supabase] Could not load discarded list:', err.message);
+  }
+}
+
+async function sbDiscard(item) {
+  if (!supabaseReady) {
+    discardedIds.add(item.id);
+    try { sessionStorage.setItem('discarded', JSON.stringify([...discardedIds])); } catch(e){}
+    return true;
+  }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/discarded_articles`, {
+      method: 'POST',
+      headers: sbHeaders(),
+      body: JSON.stringify({
+        article_id:    item.id,
+        title:         item.title,
+        source:        item.label,
+        discarded_at:  new Date().toISOString()
+      }),
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!r.ok) throw new Error(`Supabase ${r.status}`);
+    discardedIds.add(item.id);
+    return true;
+  } catch(err) {
+    console.error('[Supabase] Discard failed:', err.message);
+    alert('Could not save discard to Supabase. Check your credentials.\n\n' + err.message);
+    return false;
+  }
+}
+
+async function sbRestore(articleId) {
+  if (!supabaseReady) {
+    discardedIds.delete(articleId);
+    try { sessionStorage.setItem('discarded', JSON.stringify([...discardedIds])); } catch(e){}
+    return true;
+  }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/discarded_articles?article_id=eq.${encodeURIComponent(articleId)}`, {
+      method: 'DELETE',
+      headers: sbHeaders(),
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!r.ok) throw new Error(`Supabase ${r.status}`);
+    discardedIds.delete(articleId);
+    return true;
+  } catch(err) {
+    console.error('[Supabase] Restore failed:', err.message);
+    alert('Could not restore article. Check your Supabase credentials.\n\n' + err.message);
+    return false;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ADMIN AUTH
+// ══════════════════════════════════════════════════════════════
+function handleAdminClick() {
+  if (isAdminMode) { exitAdminMode(); return; }
+  if (ADMIN_PASSWORD === 'YOUR_ADMIN_PASSWORD') {
+    alert('Please set ADMIN_PASSWORD in the script config before using admin mode.');
+    return;
+  }
+  document.getElementById('authModal').classList.add('visible');
+  setTimeout(() => document.getElementById('pwInput').focus(), 80);
+}
+
+function confirmAuth() {
+  const val = document.getElementById('pwInput').value;
+  if (val === ADMIN_PASSWORD) {
+    closeModal();
+    enterAdminMode();
+  } else {
+    document.getElementById('pwErr').textContent = 'Incorrect password. Try again.';
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwInput').focus();
+  }
+}
+
+function closeModal() {
+  document.getElementById('authModal').classList.remove('visible');
+  document.getElementById('pwInput').value = '';
+  document.getElementById('pwErr').textContent = '';
+}
+
+function enterAdminMode() {
+  isAdminMode = true;
+  document.body.classList.add('admin-mode-on');
+  document.getElementById('adminBar').classList.add('visible');
+  document.getElementById('hdrLine').classList.add('admin-mode');
+  document.getElementById('btnAdmin').classList.add('active');
+  document.getElementById('adminBtnLabel').textContent = 'Exit Admin';
+  document.getElementById('hdrSub').textContent = 'Moderation mode active';
+  if (!supabaseReady) document.getElementById('cfgTip').style.display = 'flex';
+  updateDiscardedCount();
+  render();
+}
+
+function exitAdminMode() {
+  isAdminMode = false;
+  document.body.classList.remove('admin-mode-on');
+  document.getElementById('adminBar').classList.remove('visible');
+  document.getElementById('hdrLine').classList.remove('admin-mode');
+  document.getElementById('btnAdmin').classList.remove('active');
+  document.getElementById('adminBtnLabel').textContent = 'Admin';
+  document.getElementById('hdrSub').textContent = 'Live global health monitoring · Free & open source';
+  document.getElementById('discardedPanel').classList.remove('visible');
+  document.getElementById('cfgTip').style.display = 'none';
+  render();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MODERATION ACTIONS
+// ══════════════════════════════════════════════════════════════
+async function discardItem(itemId) {
+  const item = allItems.find(i => i.id === itemId);
+  if (!item) return;
+  const btn = document.querySelector(`[data-discard="${itemId}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  const ok = await sbDiscard(item);
+  if (ok) {
+    updateDiscardedCount();
+    renderDiscardedPanel();
+    render();
+  }
+}
+
+async function restoreItem(articleId) {
+  const btn = document.querySelector(`[data-restore="${articleId}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Restoring…'; }
+  const ok = await sbRestore(articleId);
+  if (ok) {
+    updateDiscardedCount();
+    renderDiscardedPanel();
+    render();
+  }
+}
+
+function updateDiscardedCount() {
+  document.getElementById('discardedCount').textContent = discardedIds.size;
+}
+
+function toggleDiscardedPanel() {
+  const panel = document.getElementById('discardedPanel');
+  panel.classList.toggle('visible');
+  if (panel.classList.contains('visible')) renderDiscardedPanel();
+}
+
+function renderDiscardedPanel() {
+  const body = document.getElementById('discardedBody');
+  const discardedItems = allItems.filter(i => discardedIds.has(i.id));
+  if (!discardedItems.length) {
+    body.innerHTML = `<p style="font-size:.76rem;color:var(--g400);padding:12px;text-align:center">No discarded articles.</p>`;
+    return;
+  }
+  body.innerHTML = discardedItems.map(it => `
+    <div class="dp-item">
+      <div class="dp-info">
+        <div class="dp-title-text">${e(it.title)}</div>
+        <div class="dp-meta">${e(it.short)} · ${e(it.dateStr)}</div>
+      </div>
+      <button class="btn-restore" data-restore="${e(it.id)}" onclick="restoreItem('${e(it.id)}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+        Restore
+      </button>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  FETCH HELPERS
+// ══════════════════════════════════════════════════════════════
+async function rss2json(feedUrl, max) {
+  const key = RSS2JSON_KEY ? `&api_key=${RSS2JSON_KEY}` : '';
+  const url = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}&count=${max}${key}`;
+  const r = await fetch(url, { signal: AbortSignal.timeout(13000) });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const d = await r.json();
+  if (d.status !== 'ok') throw new Error(d.message || 'not ok');
+  return d.items || [];
+}
+
+async function fetchWHO() {
+  const url = 'https://www.who.int/api/news/diseaseoutbreaknews?$top=15&$orderby=PublicationDateAndTime%20desc';
+  const r = await fetch(url, { signal: AbortSignal.timeout(13000), headers: { 'Accept': 'application/json' } });
+  if (!r.ok) throw new Error(`WHO API ${r.status}`);
+  const d = await r.json();
+  const items = d.value || d.Items || d.items || [];
+  if (!items.length) throw new Error('WHO API returned 0 items');
+  return items.slice(0, 15).map((it, i) => {
+    const date = it.PublicationDateAndTime ? new Date(it.PublicationDateAndTime) : null;
+    return makeItem('who', 'WHO DON', 'WHO Disease Outbreak News', 'who-b', 'who-s',
+      it.Title || 'WHO Report',
+      it.Url ? (it.Url.startsWith('http') ? it.Url : 'https://www.who.int' + it.Url) : 'https://www.who.int/emergencies/disease-outbreak-news',
+      stripTags(it.Summary || it.Overview || ''), date, i);
+  });
+}
+
+async function fetchReliefWeb() {
+  const raw = await rss2json('https://reliefweb.int/updates/rss.xml?search=disease+outbreak+epidemic+health+emergency', 15);
+  return rssToItems(raw, 'rw', 'ReliefWeb', 'ReliefWeb Health Emergencies', 'rw-b', 'rw-s');
+}
+
+async function fetchCDCTravel() {
+  const raw = await rss2json('https://wwwnc.cdc.gov/travel/rss/notices.xml', 15);
+  return rssToItems(raw, 'cdc', 'CDC Travel', "CDC Traveler's Health Notices", 'cdc-b', 'cdc-s');
+}
+
+async function fetchAFRO() {
+  const raw = await rss2json('https://www.afro.who.int/rss/emergencies.xml', 15);
+  return rssToItems(raw, 'afro', 'WHO AFRO', 'WHO Africa – Emergencies & Outbreaks', 'afro-b', 'afro-s');
+}
+
+function rssToItems(raw, srcId, short, label, badge, stripe) {
+  return raw.map((it, i) => {
+    const date = it.pubDate ? new Date(it.pubDate) : null;
+    return makeItem(srcId, short, label, badge, stripe, it.title || 'Report', it.link || it.url || '', it.description || it.content || '', date, i);
+  });
+}
+
+function makeItem(srcId, short, label, badge, stripe, title, link, descRaw, date, idx) {
+  const desc = stripTags(descRaw || '');
+  return {
+    id: srcId + '_' + idx,
+    srcId, short, label, badge, stripe,
+    title: cleanTitle(title),
+    link:  link.trim(),
+    desc:  desc.slice(0, 260) + (desc.length > 260 ? '…' : ''),
+    ms:    date && !isNaN(date) ? date.getTime() : Date.now() - idx * 3600000,
+    dateStr: date && !isNaN(date) ? relDate(date) : 'Recent',
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+//  LOADERS TABLE
+// ══════════════════════════════════════════════════════════════
+const LOADERS = [
+  { id: 'who',  label: 'WHO DON',      fn: fetchWHO,       note: 'direct API' },
+  { id: 'rw',   label: 'ReliefWeb',    fn: fetchReliefWeb, note: 'RSS proxy'  },
+  { id: 'cdc',  label: 'CDC Travel',   fn: fetchCDCTravel, note: 'RSS proxy'  },
+  { id: 'afro', label: 'WHO AFRO',     fn: fetchAFRO,      note: 'RSS proxy'  },
+];
+
+// ══════════════════════════════════════════════════════════════
+//  LOAD ALL
+// ══════════════════════════════════════════════════════════════
+async function loadAll() {
+  allItems = [];
+  LOADERS.forEach(l => setChip(l.id, '…'));
+  setChip('all', '…');
+  setSt('busy', 'Loading feeds…');
+  const btn = document.getElementById('btnR');
+  btn.disabled = true; btn.classList.add('spin');
+  showLoading();
+
+  // Load discarded list from Supabase in parallel
+  await sbLoadDiscarded();
+
+  const results = await Promise.allSettled(LOADERS.map(l => l.fn()));
+  let failCount = 0;
+
+  results.forEach((r, i) => {
+    const l = LOADERS[i];
+    if (r.status === 'fulfilled' && r.value.length > 0) {
+      allItems.push(...r.value);
+      setChip(l.id, r.value.length);
+      markP(l.id, 'done');
+    } else {
+      failCount++;
+      setChip(l.id, r.value?.length === 0 ? '0' : '!');
+      markP(l.id, 'fail');
+      console.warn(`[${l.id}] failed:`, r.reason?.message || 'empty response');
+    }
+  });
+
+  allItems.sort((a, b) => b.ms - a.ms);
+  // Tab chips show total (not filtered) so admins can see full counts
+  setChip('all', allItems.length);
+
+  const rssFailures = results.filter((r,i) => LOADERS[i].note === 'RSS proxy' && r.status !== 'fulfilled').length;
+  document.getElementById('keyTip').style.display = rssFailures >= 2 ? 'flex' : 'none';
+
+  setSt(allItems.length ? 'on' : 'err',
+        allItems.length ? `Updated ${fmtNow()}` : 'No data loaded');
+  btn.disabled = false; btn.classList.remove('spin');
+  updateDiscardedCount();
+  render();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════════════════════
+function render() {
+  const q    = document.getElementById('searchInput').value.toLowerCase().trim();
+  const sort = document.getElementById('sortSel').value;
+
+  let items = activeTab === 'all' ? [...allItems] : allItems.filter(i => i.srcId === activeTab);
+
+  // Filter out discarded items (unless in admin mode, where they're shown dimmed)
+  if (!isAdminMode) {
+    items = items.filter(i => !discardedIds.has(i.id));
+  }
+
+  if (q) items = items.filter(i =>
+    i.title.toLowerCase().includes(q) ||
+    i.desc.toLowerCase().includes(q) ||
+    i.short.toLowerCase().includes(q)
+  );
+  if (sort === 'source') items.sort((a, b) => a.srcId.localeCompare(b.srcId) || b.ms - a.ms);
+
+  const visibleCount = isAdminMode ? items.filter(i => !discardedIds.has(i.id)).length : items.length;
+  document.getElementById('clbl').textContent = `${visibleCount} result${visibleCount !== 1 ? 's' : ''}` +
+    (isAdminMode && discardedIds.size > 0 ? ` (${discardedIds.size} hidden)` : '');
+
+  const el = document.getElementById('container');
+  if (!items.length && allItems.length) {
+    el.innerHTML = `<div class="state"><p>No results match your search. Try different keywords.</p></div>`;
+    return;
+  }
+  if (!items.length) return;
+  el.innerHTML = `<div class="feed">${items.map(card).join('')}</div>`;
+}
+
+function card(it) {
+  const href       = it.link && it.link.startsWith('http') ? it.link : '#';
+  const isDiscarded = discardedIds.has(it.id);
+  const itemClass  = isDiscarded ? 'fitem discarded-preview' : 'fitem';
+  const discardBtn = `
+    <button class="btn-discard" data-discard="${e(it.id)}" onclick="discardItem('${e(it.id)}')" title="Discard from public view">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+      ${isDiscarded ? 'Discarded' : 'Discard'}
+    </button>`;
+  return `<div class="${itemClass}">
+    <div class="stripe ${it.stripe}"></div>
+    <div class="ibody">
+      <div class="itop">
+        <span class="sbadge ${it.badge}">${e(it.short)}</span>
+        <span class="idate">${e(it.dateStr)}</span>
+      </div>
+      <div class="ititle"><a href="${href}" target="_blank" rel="noopener noreferrer">${e(it.title)}</a></div>
+      ${it.desc ? `<div class="idesc">${e(it.desc)}</div>` : ''}
+      <div class="ifoot">
+        <span class="ifull">${e(it.label)}</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          ${discardBtn}
+          <a class="alink" href="${href}" target="_blank" rel="noopener noreferrer">Full report
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ══════════════════════════════════════════════════════════════
+function showLoading() {
+  const rows = LOADERS.map(l => `
+    <div class="prow" id="pr-${l.id}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+      ${l.label} <span style="opacity:.45;font-size:.65rem">(${l.note})</span>
+    </div>`).join('');
+  document.getElementById('container').innerHTML = `
+    <div class="state">
+      <div class="spinner"></div>
+      <h3>Fetching live data…</h3>
+      <p>Connecting to ${LOADERS.length} health sources</p>
+      <div class="plist">${rows}</div>
+    </div>`;
+  LOADERS.forEach((l, i) => setTimeout(() => markP(l.id, 'active'), i * 220 + 300));
+}
+
+function markP(id, state) {
+  const el = document.getElementById('pr-' + id);
+  if (!el) return;
+  el.className = 'prow ' + state;
+  const ic = {
+    done:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+    fail:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+    active: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>`,
+  };
+  const l = LOADERS.find(x => x.id === id);
+  el.innerHTML = (ic[state] || ic.active) + ` ${l?.label || id} <span style="opacity:.45;font-size:.65rem">(${l?.note || ''})</span>`;
+}
+
+function setTab(id, btn) {
+  activeTab = id;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+function setChip(id, v) { const el = document.getElementById('chip-' + id); if (el) el.textContent = v; }
+function setSt(state, text) {
+  document.getElementById('sd').className = 'sd ' + state;
+  document.getElementById('slbl').textContent = text;
+}
+function stripTags(h) { const d = document.createElement('div'); d.innerHTML = h; return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim(); }
+function cleanTitle(t) { return (t || '').replace(/\s+/g, ' ').trim().replace(/^\[.*?\]\s*/, '').replace(/^Level\s*\d+\s*[-–]\s*/i, ''); }
+function relDate(d) {
+  const h = Math.floor((Date.now() - d) / 3600000);
+  if (h < 1) return 'Just now';
+  if (h < 24) return h + 'h ago';
+  if (h < 48) return 'Yesterday';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function fmtNow() {
+  const d = new Date();
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' · ' +
+         d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+function e(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Close modal on overlay click
+document.getElementById('authModal').addEventListener('click', function(ev) {
+  if (ev.target === this) closeModal();
+});
+
+document.addEventListener('DOMContentLoaded', loadAll);
+</script>
+</body>
+</html>
