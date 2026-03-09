@@ -1,5 +1,5 @@
 exports.handler = async () => {
-  const response = await fetch('https://api.reliefweb.int/v1/reports?appname=tghn-outbreak-monitor', {
+  const response = await fetch('https://api.reliefweb.int/v1/reports?appname=apidoc-demo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
