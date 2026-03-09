@@ -541,7 +541,7 @@ async function fetchWHO() {
   });
 }
 async function fetchReliefWeb() {
-  const raw = await rss2json('https://reliefweb.int/updates/rss.xml?search=disease+outbreak+epidemic+health+emergency', 15);
+  const raw = await rss2json('https://reliefweb.int/updates/rss.xml?search=disease+outbreak&type=report&status=ongoing', 15);
   return rssToItems(raw, 'rw', 'ReliefWeb', 'ReliefWeb Health Emergencies', 'rw-b', 'rw-s');
 }
 async function fetchCDCTravel() {
