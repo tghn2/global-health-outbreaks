@@ -48,6 +48,7 @@
     --c-rw:    #80af40;
     --c-cdc:   #1e4078;
     --c-afro:  #7acbc6;
+    --c-paho:  #00788A;
     --c-mmwr:  #771213;
     --c-pub:   #f06ea9;
     --c-admin: #f26524;
@@ -177,6 +178,7 @@
   .afro-b{color:#2a6b68;background:#d4f0ee}  .afro-s{background:#7acbc6}
   .mmwr-b{color:#771213;background:#fde8e8}  .mmwr-s{background:#771213}
   .pub-b{color:#8a1a50;background:#fde6f2}   .pub-s{background:#f06ea9}
+  .paho-b { color:var(--c-paho); background:#e6f7f8; } .paho-s { background:var(--c-paho); }               
 
   /* ── LOADING STATE ── */
   .state{background:#fff;border:1px solid var(--g100);border-radius:8px;padding:50px 24px;text-align:center}
@@ -562,6 +564,36 @@ async function fetchReliefWeb() {
   const raw = await rss2json('https://reliefweb.int/updates/rss.xml?search=epidemic', 15);
   return rssToItems(raw, 'rw', 'ReliefWeb', 'ReliefWeb Health Emergencies', 'rw-b', 'rw-s');
 }*/
+
+async function fetchPAHO() {
+      const ep = '/.netlify/functions/paho';
+      // fallback endpoints (in case you rename or later switch to rss-parser function)
+      const fallback = ['/.netlify/functions/paho', '/api/paho'];
+      try {
+        let raw = await safeFetchJson(ep);
+        if (!Array.isArray(raw)) {
+          // try fallbacks
+          for (const e of fallback) {
+            raw = await safeFetchJson(e);
+            if (Array.isArray(raw)) break;
+          }
+        }
+        if (!Array.isArray(raw)) {
+          // return empty array to let UI continue
+          console.warn('[fetchPAHO] no array returned from any endpoint; returning []');
+          return [];
+        }
+        // raw items: { title, link, description, pubDate }
+        return raw.map((it, i) => {
+          const date = it.pubDate ? new Date(it.pubDate).toISOString() : null;
+          return makeItem('paho', 'PAHO', 'PAHO', 'paho-b', 'paho-s',
+            it.title || 'PAHO report', it.link || it.url || '', it.description || it.summary || '', date, i);
+        });
+      } catch (err) {
+        console.warn('[fetchPAHO] failed:', err?.message || err);
+        return [];
+      }
+    }
   
 async function fetchCDCTravel() {
   const raw = await rss2json('https://wwwnc.cdc.gov/travel/rss/notices.xml', 15);
@@ -590,6 +622,7 @@ const LOADERS = [
   { id: 'rw',   label: 'ReliefWeb',  fn: fetchReliefWeb, note: 'RSS proxy'  },
   { id: 'cdc',  label: 'CDC Travel', fn: fetchCDCTravel, note: 'RSS proxy'  },
   { id: 'afro', label: 'WHO AFRO',   fn: fetchAFRO,      note: 'RSS proxy'  },
+  { id: 'paho', label: 'PAHO',       fn: fetchPAHO,      note: 'RSS proxy'  },
 ];
 
 async function loadAll() {
