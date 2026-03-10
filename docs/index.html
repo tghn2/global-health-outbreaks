@@ -540,7 +540,7 @@ async function fetchWHO() {
       stripTags(it.Summary || it.Overview || ''), date, i);
   });
 }
-/* async function fetchReliefWeb() {
+async function fetchReliefWeb() {
   const r = await fetch('/.netlify/functions/reliefweb', {
     signal: AbortSignal.timeout(13000)
   });
@@ -557,11 +557,11 @@ async function fetchWHO() {
       stripTags(fields['body-html'] || ''),
       date, i);
   });
-} */
-async function fetchReliefWeb() {
+} 
+/*async function fetchReliefWeb() {
   const raw = await rss2json('https://reliefweb.int/updates/rss.xml?search=epidemic', 15);
   return rssToItems(raw, 'rw', 'ReliefWeb', 'ReliefWeb Health Emergencies', 'rw-b', 'rw-s');
-}
+}*/
   
 async function fetchCDCTravel() {
   const raw = await rss2json('https://wwwnc.cdc.gov/travel/rss/notices.xml', 15);
