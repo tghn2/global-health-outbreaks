@@ -309,6 +309,7 @@
     <button class="tab" onclick="setTab('rw',this)"><span class="tdot" style="background:var(--c-rw)"></span>ReliefWeb<span class="chip" id="chip-rw">&mdash;</span></button>
     <button class="tab" onclick="setTab('cdc',this)"><span class="tdot" style="background:var(--c-cdc)"></span>CDC Travel<span class="chip" id="chip-cdc">&mdash;</span></button>
     <button class="tab" onclick="setTab('afro',this)"><span class="tdot" style="background:var(--c-afro)"></span>WHO AFRO<span class="chip" id="chip-afro">&mdash;</span></button>
+    <button class="tab" onclick="setTab('paho',this)"><span class="tdot" style="background:var(--c-paho)"></span>PAHO<span class="chip" id="chip-paho">&mdash;</span></button>
   </div>
 </div>
 
@@ -355,7 +356,8 @@
   <a href="https://www.who.int/emergencies/disease-outbreak-news" target="_blank">WHO DON</a> &middot;
   <a href="https://reliefweb.int" target="_blank">ReliefWeb</a> &middot;
   <a href="https://wwwnc.cdc.gov/travel/notices" target="_blank">CDC Travel</a> &middot;
-  <a href="https://www.afro.who.int/health-topics/disease-outbreaks" target="_blank">WHO AFRO</a>
+  <a href="https://www.afro.who.int/health-topics/disease-outbreaks" target="_blank">WHO AFRO</a> &middot;
+  <a href="https://www.paho.org/en/topics/disease-outbreaks" target="_blank">PAHO</a>
   <br>The Global Health Network &middot; Enabling research by sharing knowledge
 </footer>
 
@@ -566,34 +568,12 @@ async function fetchReliefWeb() {
 }*/
 
 async function fetchPAHO() {
-      const ep = '/.netlify/functions/paho';
-      // fallback endpoints (in case you rename or later switch to rss-parser function)
-      const fallback = ['/.netlify/functions/paho', '/api/paho'];
-      try {
-        let raw = await safeFetchJson(ep);
-        if (!Array.isArray(raw)) {
-          // try fallbacks
-          for (const e of fallback) {
-            raw = await safeFetchJson(e);
-            if (Array.isArray(raw)) break;
-          }
-        }
-        if (!Array.isArray(raw)) {
-          // return empty array to let UI continue
-          console.warn('[fetchPAHO] no array returned from any endpoint; returning []');
-          return [];
-        }
-        // raw items: { title, link, description, pubDate }
-        return raw.map((it, i) => {
-          const date = it.pubDate ? new Date(it.pubDate).toISOString() : null;
-          return makeItem('paho', 'PAHO', 'PAHO', 'paho-b', 'paho-s',
-            it.title || 'PAHO report', it.link || it.url || '', it.description || it.summary || '', date, i);
-        });
-      } catch (err) {
-        console.warn('[fetchPAHO] failed:', err?.message || err);
-        return [];
-      }
-    }
+  const r = await fetch('/.netlify/functions/paho', { signal: AbortSignal.timeout(13000) });
+  if (!r.ok) throw new Error('PAHO proxy ' + r.status);
+  const raw = await r.json();
+  if (!Array.isArray(raw) || !raw.length) throw new Error('PAHO returned 0 items');
+  return rssToItems(raw, 'paho', 'PAHO', 'PAHO – Disease Alerts', 'paho-b', 'paho-s');
+}
   
 async function fetchCDCTravel() {
   const raw = await rss2json('https://wwwnc.cdc.gov/travel/rss/notices.xml', 15);

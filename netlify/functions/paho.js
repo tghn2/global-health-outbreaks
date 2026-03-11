@@ -14,7 +14,7 @@ function extractTag(text, tag) {
 function parseRSSByRegex(xml) {
   const items = [];
   // find item blocks
-  const itemRe = /<item[^>]*>([\\s\\S]*?)<\\/item>/gi;
+  const itemRe = /<item[^>]*>([\s\S]*?)<\/item>/gi;
   let match;
   while ((match = itemRe.exec(xml)) !== null) {
     const block = match[1];
